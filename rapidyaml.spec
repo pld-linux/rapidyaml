@@ -1,3 +1,4 @@
+# TODO: unbundle c4core
 #
 # Conditional build:
 %bcond_without	apidocs		# API documentation
@@ -113,6 +114,7 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(644,root,root,755)
 %{_libdir}/libryml.so
 %{_includedir}/ryml*.hpp
+%{_includedir}/c4
 %{_libdir}/cmake/ryml
 
 %if %{with apidocs}
