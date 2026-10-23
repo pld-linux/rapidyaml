@@ -13,6 +13,7 @@ Source0:	https://github.com/biojppm/rapidyaml/archive/v%{version}/%{name}-%{vers
 Source10:	patch-no-download
 Patch0:		653.patch
 Patch1:		662.patch
+Patch2:		no-c4core-doc.patch
 URL:		https://github.com/biojppm/rapidyaml
 BuildRequires:	cmake
 BuildRequires:	ninja
@@ -57,6 +58,7 @@ Dokumentacja API biblioteki %{name}.
 %setup -q
 %patch -P0 -p1
 %patch -P1 -p1
+%patch -P2 -p1
 
 # Patch out download of gtest:
 %{SOURCE10} proj/c4proj/c4Project.cmake '^    if\(_GTEST\)' '^    endif'

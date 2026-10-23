@@ -1,0 +1,11 @@
+--- rapidyaml-0.16.0/doc/Makefile~	2026-07-21 21:02:40.000000000 +0200
++++ rapidyaml-0.16.0/doc/Makefile	2026-10-24 00:53:34.192870564 +0200
+@@ -42,7 +42,7 @@
+ 	@echo "    `pwd`/$(BUILDDIR)/html/index.html"
+ 
+ 
+-doxy: doxy_install c4core-clone
++doxy: doxy_install
+ 	@## use cmake to generate a compile database
+ 	@#cmake -S .. -B "$(BUILDDIR)/proj" -DCMAKE_CXX_COMPILER=$(CLANG) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+ 	@#ln -fs "$(BUILDDIR)/proj/compile_commands.json" .
