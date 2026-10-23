@@ -1,0 +1,27 @@
+From b4d80b0e89bde09ec7d6333777fcf17405a532bd Mon Sep 17 00:00:00 2001
+From: "Benjamin A. Beasley" <code@musicinmybrain.net>
+Date: Sat, 5 Sep 2026 08:01:18 +0100
+Subject: [PATCH] Fix `c4_install_exports` call with system `c4core`
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fixes #659. Based on a suggestion by Sébastien Noel (@twolife) in a
+comment on that issue.
+---
+ CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 285dc9937..b482a75ea 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -200,7 +200,7 @@ endif()
+ 
+ if(RYML_INSTALL)
+     c4_install_target(ryml)
+-    if(RYML_STANDALONE OR RYML_SYSTEM_C4CORE)
++    if(RYML_STANDALONE AND NOT RYML_SYSTEM_C4CORE)
+         c4_install_exports()
+     else()
+         c4_install_exports(DEPENDENCIES c4core)

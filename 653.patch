@@ -1,0 +1,327 @@
+From c86f9336abdc1672f674bed4909ea429d96ea8ee Mon Sep 17 00:00:00 2001
+From: Joao Paulo Magalhaes <dev@jpmag.me>
+Date: Thu, 30 Jul 2026 17:35:04 +0100
+Subject: [PATCH] cmake: fix tests with RYML_SYSTEM_C4CORE
+
+---
+ .github/workflows/install.yml | 64 +++++++++++++++++++++++++++++++++++
+ .github/workflows/install.ys  | 61 +++++++++++++++++++++++++++++----
+ changelog/current.md          |  1 +
+ ext/testbm.cmake              | 28 +++++++++------
+ samples/custom_c4core/run.sh  |  2 +-
+ test/CMakeLists.txt           |  8 ++---
+ tools/CMakeLists.txt          |  2 +-
+ 7 files changed, 143 insertions(+), 23 deletions(-)
+
+diff --git a/.github/workflows/install.yml b/.github/workflows/install.yml
+index f35aa5dcd..2a1e4b054 100644
+--- a/.github/workflows/install.yml
++++ b/.github/workflows/install.yml
+@@ -213,3 +213,67 @@ jobs:
+       run: |
+         cd $BDIR/test
+         ctest -C ${{matrix.bt}} --output-on-failure
++  sysc4core:
++    name: sysc4core/${{matrix.name}}
++    continue-on-error: false
++    runs-on: ${{matrix.os}}
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++        - name: gcc
++          os: ubuntu-24.04
++          gen: -DCMAKE_CXX_COMPILER=g++
++          bt: Debug
++          rel: lib/cmake/c4core
++        - name: clang
++          os: ubuntu-24.04
++          gen: -DCMAKE_CXX_COMPILER=clang++
++          bt: Debug
++          rel: lib/cmake/c4core
++        - name: xcode
++          os: macos-15-intel
++          gen: -G Xcode -DCMAKE_OSX_ARCHITECTURES=x86_64
++          bt: Debug
++          rel: lib/cmake/c4core
++        - name: vs2026
++          os: windows-latest
++          gen: -G 'Visual Studio 18 2026' -A x64
++          bt: Debug
++          rel: cmake
++    steps:
++    - name: checkout
++      uses: actions/checkout@v6
++    - name: checkout c4core
++      run: make -C ext c4core
++    - name: config c4core
++      run: |
++        cmake -S ext/c4core -B ext/c4core/build \
++           -D CMAKE_INSTALL_PREFIX=`pwd`/ext/c4core/install \
++           ${{matrix.gen}}
++    - name: build c4core
++      run: |
++        cmake --build ext/c4core/build --target c4core --parallel
++    - name: install c4core
++      run: |
++        cmake --build ext/c4core/build --target install
++    - name: '--------------------------------------'
++      run: echo
++    - name: configure ryml
++      run: |
++        cmake -S . -B build \
++          -D c4core_DIR=`pwd`/ext/c4core/install/${{matrix.rel}} \
++          -D RYML_SYSTEM_C4CORE=ON \
++          -D RYML_BUILD_TESTS=ON \
++          ${{matrix.gen}} \
++          -D CMAKE_BUILD_TYPE=${{matrix.bt}}
++    - name: build ryml
++      run: |
++        cmake --build build --target ryml --parallel --config ${{matrix.bt}}
++    - name: build tests
++      run: |
++        cmake --build build --target ryml-test-build --parallel --config ${{matrix.bt}}
++    - name: run tests
++      run: |
++        export CTEST_PARALLEL_LEVEL=`nproc`
++        cmake --build build --target ryml-test-run --config ${{matrix.bt}}
+diff --git a/.github/workflows/install.ys b/.github/workflows/install.ys
+index c0552af5e..305eba91e 100644
+--- a/.github/workflows/install.ys
++++ b/.github/workflows/install.ys
+@@ -11,6 +11,8 @@ env:
+   NUM_JOBS_BUILD: # 4
+ 
+ jobs:
++
++  #---------------------------
+   install_tests:
+     if: |
+       (!contains(github.event.head_commit.message, 'skip all')) ||
+@@ -19,32 +21,26 @@ jobs:
+     name: ${{matrix.name}}/${{matrix.bt}}
+     continue-on-error: true
+     runs-on: ${{matrix.os}}
+-
+     strategy:
+       fail-fast: false
+       matrix:
+         include:
+-
+           - {name: find_package/linux,        sdir: test/test_install,      os: ubuntu-24.04,   cxx: g++-16,     gen: -DCMAKE_CXX_COMPILER=g++-16,               tgt: all,       bt: Debug,   vars: -Dryml_DIR=$GITHUB_WORKSPACE/$PDIR/lib/cmake/ryml -DRYML_TEST_INSTALL_PACKAGE_MODE=ON}
+           - {name: find_package/linux/libcxx, sdir: test/test_install,      os: ubuntu-24.04,   cxx: clang++-18, gen: -DCMAKE_CXX_COMPILER=clang++-18,           tgt: all,       bt: Debug,   vars: -Dryml_DIR=$GITHUB_WORKSPACE/$PDIR/lib/cmake/ryml -DRYML_TEST_INSTALL_PACKAGE_MODE=ON, commonvars: -DRYML_USE_LIBCXX=ON}
+           - {name: find_package/macos,        sdir: test/test_install,      os: macos-15-intel, cxx: xcode,      gen: -G Xcode -DCMAKE_OSX_ARCHITECTURES=x86_64, tgt: ALL_BUILD, bt: Debug,   vars: -Dryml_DIR=$GITHUB_WORKSPACE/$PDIR/lib/cmake/ryml -DRYML_TEST_INSTALL_PACKAGE_MODE=ON}
+           - {name: find_package/win,          sdir: test/test_install,      os: windows-latest, cxx: vs2026,     gen: -G 'Visual Studio 18 2026' -A x64,         tgt: ALL_BUILD, bt: Debug,   vars: -Dryml_DIR=$GITHUB_WORKSPACE/$PDIR/cmake -DRYML_TEST_INSTALL_PACKAGE_MODE=ON}
+-
+           - {name: find_library/linux,        sdir: test/test_install,      os: ubuntu-24.04,   cxx: g++-16,     gen: -DCMAKE_CXX_COMPILER=g++-16,               tgt: all,       bt: Debug,   vars: -DCMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/$PDIR -DRYML_TEST_INSTALL_PACKAGE_MODE=OFF}
+           - {name: find_library/linux/libcxx, sdir: test/test_install,      os: ubuntu-24.04,   cxx: clang++-18, gen: -DCMAKE_CXX_COMPILER=clang++-18,           tgt: all,       bt: Debug,   vars: -DCMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/$PDIR -DRYML_TEST_INSTALL_PACKAGE_MODE=OFF, commonvars: -DRYML_USE_LIBCXX=ON}
+           - {name: find_library/macos,        sdir: test/test_install,      os: macos-15-intel, cxx: xcode,      gen: -G Xcode -DCMAKE_OSX_ARCHITECTURES=x86_64, tgt: ALL_BUILD, bt: Debug,   vars: -DCMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/$PDIR -DRYML_TEST_INSTALL_PACKAGE_MODE=OFF}
+           - {name: find_library/win,          sdir: test/test_install,      os: windows-latest, cxx: vs2026,     gen: -G 'Visual Studio 18 2026' -A x64,         tgt: ALL_BUILD, bt: Debug,   vars: -DCMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/$PDIR -DRYML_TEST_INSTALL_PACKAGE_MODE=OFF}
+-
+           - {name: singleheader/linux,        sdir: test/test_singleheader, os: ubuntu-24.04,   cxx: g++-16,     gen: -DCMAKE_CXX_COMPILER=g++-16,               tgt: all,       bt: Debug}
+           - {name: singleheader/linux/libcxx, sdir: test/test_singleheader, os: ubuntu-24.04,   cxx: clang++-18, gen: -DCMAKE_CXX_COMPILER=clang++-18,           tgt: all,       bt: Debug, commonvars: -DRYML_USE_LIBCXX=ON}
+           - {name: singleheader/macos,        sdir: test/test_singleheader, os: macos-15-intel, cxx: xcode,      gen: -G Xcode -DCMAKE_OSX_ARCHITECTURES=x86_64, tgt: ALL_BUILD, bt: Debug}
+           - {name: singleheader/win,          sdir: test/test_singleheader, os: windows-latest, cxx: vs2026,     gen: -G 'Visual Studio 18 2026' -A x64,         tgt: ALL_BUILD, bt: Debug}
+-
+           - {name: singlesource/linux,        sdir: test/test_singlesource, os: ubuntu-24.04,   cxx: g++-16,     gen: -DCMAKE_CXX_COMPILER=g++-16,               tgt: all,       bt: Debug}
+           - {name: singlesource/linux/libcxx, sdir: test/test_singlesource, os: ubuntu-24.04,   cxx: clang++-18, gen: -DCMAKE_CXX_COMPILER=clang++-18,           tgt: all,       bt: Debug, commonvars: -DRYML_USE_LIBCXX=ON}
+           - {name: singlesource/macos,        sdir: test/test_singlesource, os: macos-15-intel, cxx: xcode,      gen: -G Xcode -DCMAKE_OSX_ARCHITECTURES=x86_64, tgt: ALL_BUILD, bt: Debug}
+           - {name: singlesource/win,          sdir: test/test_singlesource, os: windows-latest, cxx: vs2026,     gen: -G 'Visual Studio 18 2026' -A x64,         tgt: ALL_BUILD, bt: Debug}
+-
+     env:
+       CXX_: ${{matrix.cxx}}
+       BT:   ${{matrix.bt}}
+@@ -52,7 +48,6 @@ jobs:
+       BDIR: build/${{matrix.name}}-${{matrix.bt}}
+       IDIR: install/${{matrix.name}}-${{matrix.bt}}
+       PDIR: prefix/${{matrix.name}}-${{matrix.bt}}
+-
+     steps:
+     - name: checkout
+       uses: actions/checkout@v6
+@@ -101,3 +96,55 @@ jobs:
+       run: |
+         cd $BDIR/test
+         ctest -C ${{matrix.bt}} --output-on-failure
++
++
++  #---------------------------
++  sysc4core:
++    name: sysc4core/${{matrix.name}}
++    continue-on-error: false
++    runs-on: ${{matrix.os}}
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++          - {name: gcc,    os: ubuntu-24.04,   gen: -DCMAKE_CXX_COMPILER=g++,                  bt: Debug, rel: lib/cmake/c4core }
++          - {name: clang,  os: ubuntu-24.04,   gen: -DCMAKE_CXX_COMPILER=clang++,              bt: Debug, rel: lib/cmake/c4core }
++          - {name: xcode,  os: macos-15-intel, gen: -G Xcode -DCMAKE_OSX_ARCHITECTURES=x86_64, bt: Debug, rel: lib/cmake/c4core }
++          - {name: vs2026, os: windows-latest, gen: -G 'Visual Studio 18 2026' -A x64,         bt: Debug, rel: cmake }
++    steps:
++    - name: checkout
++      uses: actions/checkout@v6
++    - name: checkout c4core
++      run: make -C ext c4core
++    - name: config c4core
++      run: |
++        cmake -S ext/c4core -B ext/c4core/build \
++           -D CMAKE_INSTALL_PREFIX=`pwd`/ext/c4core/install \
++           ${{matrix.gen}}
++    - name: build c4core
++      run: |
++        cmake --build ext/c4core/build --target c4core --parallel
++    - name: install c4core
++      run: |
++        cmake --build ext/c4core/build --target install
++    - name: "--------------------------------------"
++      run: echo
++    - name: configure ryml
++      run: |
++        cmake -S . -B build \
++          -D c4core_DIR=`pwd`/ext/c4core/install/${{matrix.rel}} \
++          -D RYML_SYSTEM_C4CORE=ON \
++          -D RYML_BUILD_TESTS=ON \
++          ${{matrix.gen}} \
++          -D CMAKE_BUILD_TYPE=${{matrix.bt}}
++    - name: build ryml
++      run: |
++        cmake --build build --target ryml --parallel --config ${{matrix.bt}}
++    - name: build tests
++      run: |
++        cmake --build build --target ryml-test-build --parallel --config ${{matrix.bt}}
++    - name: run tests
++      run: |
++        export CTEST_PARALLEL_LEVEL=`nproc`
++        cmake --build build --target ryml-test-run --config ${{matrix.bt}}
++
+diff --git a/changelog/current.md b/changelog/current.md
+index e69de29bb..759aabc0e 100644
+--- a/changelog/current.md
++++ b/changelog/current.md
+@@ -0,0 +1 @@
++- [PR#653](https://github.com/biojppm/rapidyaml/pull/653) cmake: fix tests with RYML_SYSTEM_C4CORE (fixes [#651](https://github.com/biojppm/rapidyaml/issues/651))
+diff --git a/ext/testbm.cmake b/ext/testbm.cmake
+index 6622f7dcb..096396513 100644
+--- a/ext/testbm.cmake
++++ b/ext/testbm.cmake
+@@ -1,5 +1,21 @@
+ # these are used both for testing and benchmarking
+ 
++function(ryml_testbm_link_with_c4core target)
++    if(RYML_SYSTEM_C4CORE)
++        target_link_libraries(${target} PUBLIC c4core::c4core)
++    elseif(NOT RYML_STANDALONE)
++        target_link_libraries(${target} PUBLIC c4core)
++    else() # RYML_STANDALONE
++        target_link_libraries(${target} PUBLIC ryml) # link with ryml to get c4core
++        ryml_add_c4core_dev_to_target(${target})
++        target_include_directories(${target} PUBLIC
++            ${CMAKE_CURRENT_LIST_DIR}/c4core.src
++            ${CMAKE_CURRENT_LIST_DIR}/c4core.dev
++        )
++    endif()
++endfunction()
++
++
+ set(C4FS_DIR ${CMAKE_CURRENT_BINARY_DIR}/subprojects/c4fs)
+ c4_download_remote_proj(c4fs C4FS_DIR
+     GIT_REPOSITORY https://github.com/biojppm/c4fs
+@@ -9,15 +25,11 @@ c4_add_library(c4fs LIBRARY_TYPE STATIC
+         ${C4FS_DIR}/src/c4/fs/fs.hpp
+         ${C4FS_DIR}/src/c4/fs/fs.cpp
+     INC_DIRS
+-        ${CMAKE_CURRENT_LIST_DIR}/c4core.src
+-        ${CMAKE_CURRENT_LIST_DIR}/c4core.dev
+         ${C4FS_DIR}/src
+-    LIBS
+-        ryml # link with ryml to get c4core
+     FOLDER
+         ext
+ )
+-ryml_add_c4core_dev_to_target(c4fs)
++ryml_testbm_link_with_c4core(c4fs)
+ if(WIN32 AND BUILD_SHARED_LIBS)
+     target_compile_definitions(c4fs PUBLIC C4FS_SHARED
+         $<BUILD_INTERFACE:C4FS_EXPORTS>
+@@ -34,15 +46,11 @@ c4_add_library(c4log
+         ${C4LOG_DIR}/src/c4/log/log.hpp
+         ${C4LOG_DIR}/src/c4/log/log.cpp
+     INC_DIRS
+-        ${CMAKE_CURRENT_LIST_DIR}/c4core.src
+-        ${CMAKE_CURRENT_LIST_DIR}/c4core.dev
+         ${C4LOG_DIR}/src
+-    LIBS
+-        ryml # link with ryml to get c4core
+     FOLDER
+         ext
+ )
+-ryml_add_c4core_dev_to_target(c4log)
++ryml_testbm_link_with_c4core(c4log)
+ if(WIN32 AND BUILD_SHARED_LIBS)
+     target_compile_definitions(c4log PUBLIC C4LOG_SHARED
+         $<BUILD_INTERFACE:C4LOG_EXPORTS>
+diff --git a/samples/custom_c4core/run.sh b/samples/custom_c4core/run.sh
+index 0e6e03583..813625912 100755
+--- a/samples/custom_c4core/run.sh
++++ b/samples/custom_c4core/run.sh
+@@ -17,7 +17,7 @@ if [ "$c4core_tag" == "." ] || [ -z "$c4core_tag" ] ; then
+     c4core_tag=$(cat ../../ext/c4core.mk \
+                  | grep C4CORE_TAG \
+                  | grep = \
+-                 | sed 's/.*=\s*\([0-9a-fA-F]*\)/\1/g')
++                 | sed 's/.*=\s*\(.*\)/\1/g')
+ fi
+ 
+ # make sure to run from where this file is
+diff --git a/test/CMakeLists.txt b/test/CMakeLists.txt
+index 845eb6229..579545ab3 100644
+--- a/test/CMakeLists.txt
++++ b/test/CMakeLists.txt
+@@ -114,7 +114,7 @@ c4_add_library(ryml-_testlib LIBRARY_TYPE STATIC
+     LIBS ryml c4fs gtest
+     FOLDER test)
+ ryml_setup_test_target_props(ryml-_testlib)
+-ryml_add_c4core_dev_to_target(ryml-_testlib)
++ryml_testbm_link_with_c4core(ryml-_testlib)
+ c4_add_library(ryml-_testmain LIBRARY_TYPE OBJECT
+     SOURCES test_lib/test_main.cpp test_lib/test_main.hpp
+     LIBS ryml
+@@ -128,7 +128,7 @@ function(ryml_add_test test_name)
+         SOURCES test_${test_name}.cpp
+         LIBS ryml-_testlib ryml-_testmain
+         FOLDER test)
+-    ryml_add_c4core_dev_to_target(${t})
++    ryml_testbm_link_with_c4core(${t})
+     if(RYML_SAVE_TEST_YAML)
+         target_sources(${t} PRIVATE test_lib/test_save.cpp)
+     endif()
+@@ -147,7 +147,7 @@ c4_add_library(ryml-_testgroup LIBRARY_TYPE STATIC
+     LIBS ryml ryml-_testlib c4fs
+     FOLDER test)
+ ryml_setup_test_target_props(ryml-_testgroup)
+-ryml_add_c4core_dev_to_target(ryml-_testgroup)
++ryml_testbm_link_with_c4core(ryml-_testgroup)
+ function(ryml_add_test_case_group name)
+     ryml_add_test(${name} ${ARGN})
+     target_link_libraries(ryml-test-${name} PUBLIC ryml-_testgroup)
+@@ -399,7 +399,7 @@ if(RYML_TEST_SUITE)
+         LIBS ryml-_testlib ryml-_testmain c4log
+         INC_DIRS ${CMAKE_CURRENT_LIST_DIR}/../src_extra
+         FOLDER test)
+-    ryml_add_c4core_dev_to_target(ryml-test-suite)
++    ryml_testbm_link_with_c4core(ryml-test-suite)
+     add_dependencies(ryml-test-build ryml-test-suite)
+ 
+     ryml_get_target_exe(ryml-test-suite tgt)
+diff --git a/tools/CMakeLists.txt b/tools/CMakeLists.txt
+index 9a3c3b277..126485e2c 100644
+--- a/tools/CMakeLists.txt
++++ b/tools/CMakeLists.txt
+@@ -6,5 +6,5 @@ c4_add_executable(ryml-parse-emit
+     INC_DIRS ../test
+     LIBS ryml c4fs
+     FOLDER tools)
+-ryml_add_c4core_dev_to_target(ryml-parse-emit)
++ryml_testbm_link_with_c4core(ryml-parse-emit)
+ ryml_maybe_dump_test_yaml(ryml-parse-emit)

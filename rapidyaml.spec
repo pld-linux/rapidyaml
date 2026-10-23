@@ -10,6 +10,9 @@ License:	MIT
 Group:		Libraries
 Source0:	https://github.com/biojppm/rapidyaml/archive/v%{version}/%{name}-%{version}.tar.gz
 # Source0-md5:	405851934758fac31bf128b6b59bd7d8
+Source10:	patch-no-download
+Patch0:		653.patch
+Patch1:		662.patch
 URL:		https://github.com/biojppm/rapidyaml
 BuildRequires:	cmake
 BuildRequires:	ninja
@@ -52,6 +55,29 @@ Dokumentacja API biblioteki %{name}.
 
 %prep
 %setup -q
+%patch -P0 -p1
+%patch -P1 -p1
+
+# Patch out download of gtest:
+%{SOURCE10} proj/c4proj/c4Project.cmake '^    if\(_GTEST\)' '^    endif'
+
+# Patch out download of c4fs:
+%{SOURCE10} ext/testbm.cmake 'c4_download_remote_proj\(c4fs' '\)$'
+%{SOURCE10} ext/testbm.cmake 'c4_add_library\(c4fs' '\)$'
+%{SOURCE10} ext/testbm.cmake 'ryml_testbm_link_with_c4core\(c4fs' '\)$'
+
+# Patch out download of c4log:
+%{SOURCE10} ext/testbm.cmake 'c4_download_remote_proj\(c4log' '\)$'
+%{SOURCE10} ext/testbm.cmake 'c4_add_library\(c4log' '\)$'
+%{SOURCE10} ext/testbm.cmake 'ryml_testbm_link_with_c4core\(c4log' '\)$'
+
+# Patch out download of yaml-test-suite:
+%{SOURCE10} test/CMakeLists.txt \
+    'c4_download_remote_proj\(yaml-test-suite' '\)$'
+sed --regexp-extended --in-place \
+    's@([[:blank:]]*)set\(tsdir.*\).*@&\nset\(suite_dir test/extern/yaml-test-suite\)\1@' \
+    'test/CMakeLists.txt'
+mkdir --parents 'test/extern/'
 
 %build
 %cmake -B build \
