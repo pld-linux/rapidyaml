@@ -6,7 +6,7 @@
 Summary:	ryml is a C++ library to parse and emit YAML
 Name:		rapidyaml
 Version:	0.16.0
-Release:	0.1
+Release:	1
 License:	MIT
 Group:		Libraries
 Source0:	https://github.com/biojppm/rapidyaml/archive/v%{version}/%{name}-%{version}.tar.gz
